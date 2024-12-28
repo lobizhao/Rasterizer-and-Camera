@@ -86,10 +86,6 @@ QImage Rasterizer::RenderScene()
             glm::vec4 screenV2 = clipV2 / clipV2.w;
 
 
-            std::cout << "Screen Space Vertices:" << std::endl;
-            std::cout << glm::to_string(screenV0) << std::endl;
-            std::cout << glm::to_string(screenV1) << std::endl;
-            std::cout << glm::to_string(screenV2) << std::endl;
 
             //screen space to pixel space
             glm::vec2 pixelV0 = glm::vec2( ((screenV0.x + 1)/2)*width,
@@ -98,6 +94,13 @@ QImage Rasterizer::RenderScene()
                                           ((screenV1.y +1)/2)*height);
             glm::vec2 pixelV2 = glm::vec2( ((screenV2.x + 1)/2)*width,
                                           ((screenV2.y +1)/2)*height);
+
+
+            std::cout << "Screen Space Vertices:" << std::endl;
+            std::cout << glm::to_string(pixelV0) << std::endl;
+            std::cout << glm::to_string(pixelV1) << std::endl;
+            std::cout << glm::to_string(pixelV2) << std::endl;
+
 
             //calculate bounding box
             std::array<float,4> boundingBox = boundBox(pixelV0, pixelV1, pixelV2);
@@ -143,17 +146,18 @@ QImage Rasterizer::RenderScene()
                         glm::vec2 pixel = glm::vec2(x + 0.5f, y + 0.5f);
 
                         glm::vec3 baryCentry = computeBarycentricCoordinates(pixel, pixelV0, pixelV1, pixelV2);
-
-
                         //queation about perspective correct
 
                         float depth = baryCentry.x* screenV0.z + baryCentry.y* screenV1.z + baryCentry.z* screenV2.z;
+                        std::cout << "depth "<< depth << std::endl;
 
                         int index = y * width + x;
                         //update depth, if pixel depth smaller, it means that pixel closed camera than perivous
                         //so we have to replace color as new depth's color
 
                         if(depth < zBuffer[index]){
+                            std:: cout << "show depth" << depth << std::endl;
+
                             zBuffer[index] = depth;
 
                             //normal interpolated
@@ -163,6 +167,8 @@ QImage Rasterizer::RenderScene()
                             glm::vec2 uv = baryCentry.x * worldV0.m_uv + baryCentry.y * worldV1.m_uv + baryCentry.z * worldV2.m_uv;
                             glm::vec3 color = GetImageColor(uv, polygons.mp_texture);
                             color = glm::clamp(color, 0.0f, 1.0f);
+
+                            std::cout << "show color " << color[0]  << " "<< color[1]  << " " << color[2] <<std::endl;
 
                             result.setPixelColor(x, y, qRgb(color[0], color[1], color[2]));
                         }
