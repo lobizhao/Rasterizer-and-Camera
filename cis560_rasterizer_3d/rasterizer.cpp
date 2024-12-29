@@ -20,27 +20,33 @@ std::array<float, 4> Rasterizer:: boundBox(glm::vec2 v0, glm::vec2 v1, glm::vec2
 
 //barycentry interpolated
 glm::vec3 Rasterizer::computeBarycentricCoordinates(glm::vec2 p, glm::vec2 v0, glm::vec2 v1, glm::vec2 v2){
-    float area = (v1.x - v0.x)*(v2.y - v0.y) - (v2.x - v0.x)*(v1.y - v0.y);
-    float s1 = ((v1.x - p.x)*(v2.y-p.y) - (v2.x - v0.x)*(v1.y -p.y))/area;
-    float s2 = ((v2.x - p.x)*(v0.y-p.y) - (v0.x - p.x)*(v2.y - p.y))/area;
-    float s3 = 1.0f - s1 -s2;
 
-    return glm::vec3(s1, s2, s3);
+    glm::vec2 p1p2(v0 - v1);
+    glm::vec2 p2p3(v1 - v2);
+    glm::vec2 pp1(p - v0);
+    glm::vec2 pp2(p - v1);
+    glm::vec2 pp3(p - v2);
+
+    float S = glm::length(glm::cross(glm::vec3(p1p2, 0), glm::vec3(-p2p3, 0)));
+    float S1 = glm::length(glm::cross(glm::vec3(pp2,0), glm::vec3(pp3,0)));
+    float S2 = glm::length(glm::cross(glm::vec3(pp1, 0), glm::vec3(pp3,0)));
+    float S3 = glm::length(glm::cross(glm::vec3(pp1, 0), glm::vec3(pp2,0)));
+
+    return {S1/S, S2/S, S3/S};
 }
 
 //perspective interpolated, ok, not clear why, should check again
 // big confuse !!!!!
-// glm::vec3 perspectiveCorrectBarcentric(const glm::vec3& barycentric, const glm::vec3& oneOverz ){
-//     glm::vec3 correctdBarycentric = glm::vec3(barycentric.x * oneOverz.x, barycentric.y * oneOverz.y, barycentric*oneOverz.z);
-//     float sum = correctdBarycentric.x + correctdBarycentric.y + correctdBarycentric.z;
+glm::vec3 Rasterizer::perspectiveCorrectBarcentric(const glm::vec3& barycentric, const glm::vec3& oneOverz ){
+    glm::vec3 correctdBarycentric = glm::vec3(barycentric.x * oneOverz.x, barycentric.y * oneOverz.y, barycentric.z * oneOverz.z);
+    float sum = correctdBarycentric.x + correctdBarycentric.y + correctdBarycentric.z;
 
-//     if(sum == 0.f){
-//         return glm::vec3(-1.f, -1.f, -1.f);
-//     }
-
-//     correctdBarycentric /= sum;
-//     return correctdBarycentric;
-// }
+    if(sum == 0.f){
+        return glm::vec3(-1.f, -1.f, -1.f);
+    }
+    correctdBarycentric /= sum;
+    return correctdBarycentric;
+}
 
 
 QImage Rasterizer::RenderScene()
@@ -50,8 +56,6 @@ QImage Rasterizer::RenderScene()
     // Note that qRgb creates a QColor,
     // and takes in values [0, 255] rather than [0, 1].
     result.fill(qRgb(0.f, 0.f, 0.f));
-
-
     //get pixel size
     int width = result.width();
     int height = result.height();
@@ -68,8 +72,7 @@ QImage Rasterizer::RenderScene()
 
     for(Polygon& polygons: m_polygons){
         for(Triangle& tri: polygons.m_tris){
-            std::cout << "get mesh"<< std::endl;
-
+            //std::cout << "get mesh"<< std::endl;
             //get world space vertex
             Vertex& worldV0 = polygons.m_verts[tri.m_indices[0]];
             Vertex& worldV1 = polygons.m_verts[tri.m_indices[1]];
@@ -96,10 +99,10 @@ QImage Rasterizer::RenderScene()
                                           ((screenV2.y +1)/2)*height);
 
 
-            std::cout << "Screen Space Vertices:" << std::endl;
-            std::cout << glm::to_string(pixelV0) << std::endl;
-            std::cout << glm::to_string(pixelV1) << std::endl;
-            std::cout << glm::to_string(pixelV2) << std::endl;
+            // std::cout << "pixel Space Vertices:" << std::endl;
+            // std::cout << glm::to_string(pixelV0) << std::endl;
+            // std::cout << glm::to_string(pixelV1) << std::endl;
+            // std::cout << glm::to_string(pixelV2) << std::endl;
 
 
             //calculate bounding box
@@ -108,12 +111,12 @@ QImage Rasterizer::RenderScene()
             //bounding box with pixel edge
             // int x_min = std::min(static_cast<int>(boundingBox[0]),0);
             // int x_max = std::max(static_cast<int>(boundingBox[1]), result.width()-1);
-            int y_min = std::min(static_cast<int>(boundingBox[2]),0);
-            int y_max = std::max(static_cast<int>(boundingBox[3]), result.height()-1);
+            int y_min = std::max(static_cast<int>(boundingBox[2]),0);
+            int y_max = std::min(static_cast<int>(boundingBox[3]), result.height()-1);
 
 
             //calculate intersection x
-            for(int y = y_min; y < y_max; y++){
+            for(int y = y_min; y <= y_max; y++){
                 std::vector<float> intersections;
 
                 //segemtn input a edge, edge: two vertex
@@ -140,23 +143,26 @@ QImage Rasterizer::RenderScene()
                     int x_start = static_cast<int>(std::ceil(intersections[0]));
                     int x_end = static_cast<int>(std::floor(intersections[1]));
 
-                    for(int x = x_start; x < x_end; x++){
-                        std::cout << "get intersection "<< std::endl;
+                    for(int x = x_start; x <= x_end; x++){
+
                         //not clear why use add 0.5f
                         glm::vec2 pixel = glm::vec2(x + 0.5f, y + 0.5f);
+                        //std::cout << "pixel"<<pixel[0] <<" "<< pixel[1] <<std::endl;
 
                         glm::vec3 baryCentry = computeBarycentricCoordinates(pixel, pixelV0, pixelV1, pixelV2);
                         //queation about perspective correct
+                        glm::vec3 oneOverz(screenV0.z, screenV1.z, screenV2.z);
+                        glm::vec3 perspABaryCentry = perspectiveCorrectBarcentric(baryCentry, oneOverz);
 
-                        float depth = baryCentry.x* screenV0.z + baryCentry.y* screenV1.z + baryCentry.z* screenV2.z;
-                        std::cout << "depth "<< depth << std::endl;
+                        float depth = perspABaryCentry.x* screenV0.z + perspABaryCentry.y* screenV1.z + perspABaryCentry.z* screenV2.z;
+                        //std::cout << "depth is: "<< depth << std::endl;
 
                         int index = y * width + x;
                         //update depth, if pixel depth smaller, it means that pixel closed camera than perivous
                         //so we have to replace color as new depth's color
 
                         if(depth < zBuffer[index]){
-                            std:: cout << "show depth" << depth << std::endl;
+                            //std:: cout << "show depth" << depth << std::endl;
 
                             zBuffer[index] = depth;
 
@@ -164,11 +170,11 @@ QImage Rasterizer::RenderScene()
                             //glm::vec3 normal = baryCentry.x * worldV0.m_normal + baryCentry.y * worldV1.m_normal + baryCentry.z * worldV2.m_normal;
 
                             //uv interpolated
-                            glm::vec2 uv = baryCentry.x * worldV0.m_uv + baryCentry.y * worldV1.m_uv + baryCentry.z * worldV2.m_uv;
+                            glm::vec2 uv = perspABaryCentry.x * worldV0.m_uv + perspABaryCentry.y * worldV1.m_uv + perspABaryCentry.z * worldV2.m_uv;
                             glm::vec3 color = GetImageColor(uv, polygons.mp_texture);
-                            color = glm::clamp(color, 0.0f, 1.0f);
+                            //color = glm::clamp(color, 0.0f, 1.0f);
 
-                            std::cout << "show color " << color[0]  << " "<< color[1]  << " " << color[2] <<std::endl;
+                            //std::cout << "show color " << color[0]  << " "<< color[1]  << " " << color[2] <<std::endl;
 
                             result.setPixelColor(x, y, qRgb(color[0], color[1], color[2]));
                         }
@@ -181,6 +187,7 @@ QImage Rasterizer::RenderScene()
         }
 
     }
+    result.mirror(false, true);
     return result;
 }
 
