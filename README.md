@@ -79,7 +79,12 @@ GLM Column Major Order
         depth = perspABaryCentry.x* screenV0.z + perspABaryCentry.y* screenV1.z + perspABaryCentry.z* screenV2.z;
 
         uv = perspABaryCentry.x * worldV0.m_uv + perspABaryCentry.y * worldV1.m_uv + perspABaryCentry.z * worldV2.m_uv;
-        
+
+## SSAA
+
+        The core idea of SSAA (Super Sampling Anti-Aliasing) is to render the image at a higher resolution and then downsample it to the target resolution to reduce aliasing.
+
+        I think this is the worst anti-aliasing method. The GPU does significantly more work, but the final output is a smaller image.
     
 
 

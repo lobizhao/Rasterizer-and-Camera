@@ -5,7 +5,7 @@
 #include <iostream>
 
 Rasterizer::Rasterizer(const std::vector<Polygon>& polygons)
-    : m_polygons(polygons), m_camera()
+    : m_polygons(polygons),scalingAA(1), m_camera()
 {}
 
 //base on 3 vertes create bounbox to reduce calculate
@@ -49,16 +49,31 @@ glm::vec3 Rasterizer::perspectiveCorrectBarcentric(const glm::vec3& barycentric,
 }
 
 
+void Rasterizer::setScaling(int scale){
+    if(scale < 1){
+        std::cout << "Scaling factor must be larger than 1";
+        scalingAA = 1;
+    }else{
+            scalingAA = scale;
+    }
+}
+
+
 QImage Rasterizer::RenderScene()
 {
-    QImage result(512, 512, QImage::Format_RGB32);
+    //get pixel size
+    //multi scaling
+    int width = 512 * scalingAA;
+    int height = 512 * scalingAA;
+
+    QImage highResResult(width, height, QImage::Format_RGB32);
     // Fill the image with black pixels.
     // Note that qRgb creates a QColor,
     // and takes in values [0, 255] rather than [0, 1].
-    result.fill(qRgb(0.f, 0.f, 0.f));
+    highResResult.fill(qRgb(0.f, 0.f, 0.f));
     //get pixel size
-    int width = result.width();
-    int height = result.height();
+    // int width = result.width();
+    // int height = result.height();
 
     //init z buffer
     //set buffer size, w*h and set per pixel as the max z,
@@ -88,22 +103,12 @@ QImage Rasterizer::RenderScene()
             glm::vec4 screenV1 = clipV1 / clipV1.w;
             glm::vec4 screenV2 = clipV2 / clipV2.w;
 
-
-
-            //screen space to pixel space
             glm::vec2 pixelV0 = glm::vec2( ((screenV0.x + 1)/2)*width,
-                                          ((screenV0.y +1)/2)*height);
+                                          ((1 - screenV0.y)/2)*height);
             glm::vec2 pixelV1 = glm::vec2( ((screenV1.x + 1)/2)*width,
-                                          ((screenV1.y +1)/2)*height);
+                                          ((1 - screenV1.y)/2)*height);
             glm::vec2 pixelV2 = glm::vec2( ((screenV2.x + 1)/2)*width,
-                                          ((screenV2.y +1)/2)*height);
-
-
-            // std::cout << "pixel Space Vertices:" << std::endl;
-            // std::cout << glm::to_string(pixelV0) << std::endl;
-            // std::cout << glm::to_string(pixelV1) << std::endl;
-            // std::cout << glm::to_string(pixelV2) << std::endl;
-
+                                          ((1 - screenV2.y)/2)*height);
 
             //calculate bounding box
             std::array<float,4> boundingBox = boundBox(pixelV0, pixelV1, pixelV2);
@@ -112,7 +117,7 @@ QImage Rasterizer::RenderScene()
             // int x_min = std::min(static_cast<int>(boundingBox[0]),0);
             // int x_max = std::max(static_cast<int>(boundingBox[1]), result.width()-1);
             int y_min = std::max(static_cast<int>(boundingBox[2]),0);
-            int y_max = std::min(static_cast<int>(boundingBox[3]), result.height()-1);
+            int y_max = std::min(static_cast<int>(boundingBox[3]), highResResult.height()-1);
 
 
             //calculate intersection x
@@ -147,7 +152,6 @@ QImage Rasterizer::RenderScene()
 
                         //not clear why use add 0.5f
                         glm::vec2 pixel = glm::vec2(x + 0.5f, y + 0.5f);
-                        //std::cout << "pixel"<<pixel[0] <<" "<< pixel[1] <<std::endl;
 
                         glm::vec3 baryCentry = computeBarycentricCoordinates(pixel, pixelV0, pixelV1, pixelV2);
                         //queation about perspective correct
@@ -155,28 +159,22 @@ QImage Rasterizer::RenderScene()
                         glm::vec3 perspABaryCentry = perspectiveCorrectBarcentric(baryCentry, oneOverz);
 
                         float depth = perspABaryCentry.x* screenV0.z + perspABaryCentry.y* screenV1.z + perspABaryCentry.z* screenV2.z;
-                        //std::cout << "depth is: "<< depth << std::endl;
 
                         int index = y * width + x;
                         //update depth, if pixel depth smaller, it means that pixel closed camera than perivous
                         //so we have to replace color as new depth's color
 
                         if(depth < zBuffer[index]){
-                            //std:: cout << "show depth" << depth << std::endl;
-
                             zBuffer[index] = depth;
 
                             //normal interpolated
-                            //glm::vec3 normal = baryCentry.x * worldV0.m_normal + baryCentry.y * worldV1.m_normal + baryCentry.z * worldV2.m_normal;
+                            // glm::vec3 normal = baryCentry.x * worldV0.m_normal + baryCentry.y * worldV1.m_normal + baryCentry.z * worldV2.m_normal;
 
                             //uv interpolated
                             glm::vec2 uv = perspABaryCentry.x * worldV0.m_uv + perspABaryCentry.y * worldV1.m_uv + perspABaryCentry.z * worldV2.m_uv;
                             glm::vec3 color = GetImageColor(uv, polygons.mp_texture);
-                            //color = glm::clamp(color, 0.0f, 1.0f);
 
-                            //std::cout << "show color " << color[0]  << " "<< color[1]  << " " << color[2] <<std::endl;
-
-                            result.setPixelColor(x, y, qRgb(color[0], color[1], color[2]));
+                            highResResult.setPixelColor(x, y, qRgb(color[0], color[1], color[2]));
                         }
 
                     }
@@ -187,11 +185,27 @@ QImage Rasterizer::RenderScene()
         }
 
     }
-    result.mirror(false, true);
+
+    //result.mirror(false, true);
+    QImage result(512, 512, QImage::Format_RGB32);
+    for (int y = 0; y < 512; y++) {
+        for (int x = 0; x < 512; x++) {
+            glm::vec3 avgColor(0.0f);
+
+            for (int j = 0; j < scalingAA; j++) {
+                for (int i = 0; i < scalingAA; i++) {
+                    QColor color = highResResult.pixelColor(x * scalingAA + i, y * scalingAA + j);
+                    avgColor += glm::vec3(color.red(), color.green(), color.blue());
+                }
+            }
+
+            avgColor /= (scalingAA * scalingAA);
+            result.setPixelColor(x, y, qRgb(avgColor.r, avgColor.g, avgColor.b));
+        }
+    }
+
     return result;
 }
-
-
 
 
 void Rasterizer::ClearScene()

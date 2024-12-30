@@ -49,6 +49,8 @@ MainWindow::MainWindow(QWidget *parent) :
 {
     ui->setupUi(this);
     setFocusPolicy(Qt::StrongFocus);
+    //connect
+    connect(ui->comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onComboBoxChanged);
 }
 
 MainWindow::~MainWindow()
@@ -260,4 +262,29 @@ void MainWindow::on_actionEquilateral_Triangle_triggered()
 void MainWindow::on_actionQuit_Esc_triggered()
 {
     QApplication::exit();
+}
+
+void MainWindow::onComboBoxChanged(int index){
+    int scale = 1;
+
+    switch (index) {
+    case 0:
+        scale = 2;
+        break;
+    case 1:
+        scale = 3;
+        break;
+    case 2:
+        scale = 4;
+        break;
+
+    default:
+        break;
+    }
+    //send value to rasterizer
+    rasterizer.setScaling(scale);
+    //update rerender
+    rendered_image = rasterizer.RenderScene();
+    //update image
+    DisplayQImage(rendered_image);
 }
